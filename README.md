@@ -9,9 +9,11 @@ absorbs the best patterns from each into a single configurable shape.
 
 ## Status
 
-**v0.1.0** — initial release. `GROW` viewport strategy only. Subsequent
-versions will add `LETTERBOX` (v0.2) and `SCALED` (v0.3) strategies +
-DRS controller (v0.4) + per-element scale helpers (v0.5).
+**v0.2.0** — adds `LETTERBOX` strategy + per-element scale helpers
+(`scale_value`, `scale_position`, `scale_size`, `get_font_size`) +
+platform-aware native detection (macOS Dock, Windows taskbar, Linux
+panel) + `min_size` / `max_size` resolution clamping. Subsequent
+versions will add `SCALED` (v0.3) + DRS controller (v0.4).
 
 ## Install
 
@@ -38,10 +40,10 @@ config = ResolutionConfig(
 - `GrowStrategy` (v0.1): viewport widens to match display aspect — more
   game world visible on widescreen monitors. No letterboxing for matching
   aspects. *Strategy used by Broken Moon Redux.*
-- `LetterboxStrategy` (planned v0.2): uniform aspect-preserving scale
-  with centered letterbox bars on aspect mismatch. Cross-platform aware
-  (macOS Dock, Windows taskbar, Linux panel offsets). *Strategy used by
-  Death_Knight_Arena.*
+- `LetterboxStrategy` (v0.2): uniform aspect-preserving scale with
+  centered letterbox bars on aspect mismatch. Cross-platform aware
+  (macOS Dock, Windows taskbar, Linux panel offsets via
+  `adjust_for_platform`). *Strategy used by Death_Knight_Arena.*
 - `ScaledStrategy` (planned v0.3): wraps `pygame.SCALED` and lets SDL
   handle scaling. Simplest implementation; trusts the platform. *Strategy
   used by Skodrak.*
