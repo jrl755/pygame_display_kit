@@ -1,0 +1,45 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python-version: ['3.13']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # pygame-ce wheels bundle SDL2 on macOS/Windows, but on Linux the
+      # manylinux wheels link to system SDL2 libs. Installing libsdl2-dev
+      # is the conservative-correct option even though it may be a no-op
+      # for the wheel itself; it ensures runtime tests can find the SDL
+      # binary if pygame-ce ever falls back to system linking.
+      - name: Install SDL2 (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsdl2-dev
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Run pytest
+        env:
+          SDL_VIDEODRIVER: dummy
+        run: pytest

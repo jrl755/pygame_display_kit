@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pygame-display-kit"
+version = "0.1.0"
+description = "Resolution and scaling utilities for pygame-ce games"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.13"
+authors = [
+    {name = "John R. Lehman"}
+]
+keywords = ["pygame", "pygame-ce", "resolution", "scaling", "fullscreen", "viewport"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Games/Entertainment",
+    "Topic :: Software Development :: Libraries :: pygame",
+]
+
+dependencies = [
+    "pygame-ce>=2.5.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-timeout>=2.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/jrl755/pygame_display_kit"
+Repository = "https://github.com/jrl755/pygame_display_kit"
+Issues = "https://github.com/jrl755/pygame_display_kit/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["pygame_display_kit*"]
+exclude = ["tests*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+timeout = 10
+addopts = "-v --tb=short"
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
