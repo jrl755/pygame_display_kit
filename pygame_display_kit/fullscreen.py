@@ -60,6 +60,14 @@ class FullscreenManager:
             The new ``pygame.Surface`` from ``pygame.display.set_mode``.
             ``config.current_width/height`` are synced to its actual
             ``get_size()`` after the call.
+
+        Both branches compose flags via :meth:`ResolutionConfig.get_display_flags`,
+        which is strategy-aware (preserves SCALED for Skodrak across the
+        toggle). The fullscreen branch additionally swaps the size
+        argument: under SCALED, the size arg is the *logical* render
+        surface (SDL scales it physically), so it must stay at BASE
+        rather than ``(0, 0)`` (which would make the logical size =
+        desktop resolution and silently break Skodrak's design contract).
         """
         going_fullscreen = not self.config.fullscreen
 
@@ -67,18 +75,26 @@ class FullscreenManager:
             # Stash windowed dims so we can restore them on toggle-back.
             self._windowed_size = (self.config.current_width, self.config.current_height)
             self.config.fullscreen = True
-            # (0, 0) → desktop resolution. Avoids OS-level letterboxing
-            # / scaling that happens when pygame is asked for a non-
-            # native fullscreen mode.
-            screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+            flags = self.config.get_display_flags()
+            if flags & pygame.SCALED:
+                # ScaledStrategy: logical surface stays at BASE; SDL
+                # handles physical scaling.
+                size = (self.config.base_width, self.config.base_height)
+            else:
+                # Non-SCALED (Letterbox, Grow): (0, 0) → desktop resolution.
+                # Avoids OS-level letterboxing / scaling that happens
+                # when pygame is asked for a non-native fullscreen mode.
+                size = (0, 0)
+            screen = pygame.display.set_mode(size, flags)
         else:
             self.config.fullscreen = False
             windowed_w, windowed_h = self._windowed_size or (
                 self.config.current_width,
                 self.config.current_height,
             )
-            flags = self.config.get_display_flags()
-            screen = pygame.display.set_mode((windowed_w, windowed_h), flags)
+            screen = pygame.display.set_mode(
+                (windowed_w, windowed_h), self.config.get_display_flags()
+            )
 
         # Sync current_* to the actual surface dims. Critical for any
         # subsequent viewport recompute — strategies read current_*.

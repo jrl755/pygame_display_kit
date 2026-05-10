@@ -72,3 +72,69 @@ class TestToggleBackPreservesWindowedSize:
                 f"Toggle-back must restore stashed windowed size; got {last_call[0][0]}"
             )
             assert config.fullscreen is False
+
+
+class TestStrategyAwareFlagsAndSize:
+    """v0.4 behavior: SCALED preserved across toggle, size swapped under SCALED.
+
+    The size-swap is critical: under ``pygame.SCALED``, the size arg
+    to ``set_mode`` is the *logical* render surface (SDL scales it
+    physically). Passing ``(0, 0)`` would make the logical size =
+    desktop resolution, silently breaking Skodrak's BASE-logical-surface
+    contract on any non-BASE-resolution monitor.
+    """
+
+    def test_toggle_preserves_scaled_under_scaled_strategy(self):
+        """Going-fullscreen under ScaledStrategy: flags include SCALED,
+        size argument is (base_w, base_h) — NOT (0, 0)."""
+        from pygame_display_kit.strategies.scaled import ScaledStrategy
+
+        config = ResolutionConfig(
+            base=(1920, 1080), strategy=ScaledStrategy, auto_detect=False
+        )
+        config.set_resolution(1920, 1080)
+        mgr = FullscreenManager(config)
+
+        with patch("pygame.display.set_mode") as mock_set_mode:
+            mock_set_mode.return_value = pygame.Surface((1920, 1080))
+            mgr.toggle()  # → fullscreen
+
+            # Both bits must be set
+            size_arg, flags_arg = mock_set_mode.call_args[0]
+            assert flags_arg & pygame.SCALED, (
+                f"SCALED bit lost on going-fullscreen; got flags={flags_arg}"
+            )
+            assert flags_arg & pygame.FULLSCREEN
+            # Size-swap: logical surface stays at BASE under SCALED.
+            assert size_arg == (1920, 1080), (
+                f"Going-fullscreen under SCALED must use (base_w, base_h) "
+                f"as the logical-surface size, not (0, 0); got {size_arg}"
+            )
+
+            # Toggle back to windowed: SCALED still present.
+            mock_set_mode.return_value = pygame.Surface((1920, 1080))
+            mgr.toggle()  # → windowed
+            _, flags_back = mock_set_mode.call_args[0]
+            assert flags_back & pygame.SCALED, (
+                f"SCALED bit lost on toggle-back to windowed; got flags={flags_back}"
+            )
+
+    def test_toggle_under_grow_strategy_passes_zero_size_to_fullscreen(self):
+        """Defensive: under non-SCALED strategies (Grow, Letterbox), the
+        going-fullscreen size argument stays at (0, 0). Catches a future
+        bug that erroneously applied the size-swap to all strategies."""
+        config = _make_config(1920, 1080)  # uses GrowStrategy
+        mgr = FullscreenManager(config)
+
+        with patch("pygame.display.set_mode") as mock_set_mode:
+            mock_set_mode.return_value = pygame.Surface((2560, 1440))
+            mgr.toggle()  # → fullscreen
+
+            size_arg, flags_arg = mock_set_mode.call_args[0]
+            assert size_arg == (0, 0), (
+                f"Going-fullscreen under non-SCALED must use (0, 0) for "
+                f"desktop resolution; got {size_arg}"
+            )
+            # No SCALED bit (Grow doesn't add it).
+            assert flags_arg & pygame.SCALED == 0
+            assert flags_arg & pygame.FULLSCREEN

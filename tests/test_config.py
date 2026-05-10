@@ -130,3 +130,34 @@ class TestAvailableResolutions:
         available = config.get_available_resolutions()
         pixel_counts = [w * h for w, h in available]
         assert pixel_counts == sorted(pixel_counts)
+
+
+class TestStrategyAwareDisplayFlags:
+    """get_display_flags() returns SCALED iff active strategy is ScaledStrategy.
+
+    The strategy-awareness is what lets FullscreenManager.toggle()
+    preserve Skodrak's SCALED flag across windowed ↔ fullscreen toggles
+    without per-strategy branching at the call site.
+    """
+
+    def test_get_display_flags_includes_scaled_under_scaled_strategy(self):
+        from pygame_display_kit.strategies.scaled import ScaledStrategy
+
+        config = ResolutionConfig(
+            base=(1920, 1080), strategy=ScaledStrategy, auto_detect=False
+        )
+        assert config.get_display_flags() & pygame.SCALED
+
+    def test_get_display_flags_omits_scaled_under_grow_strategy(self):
+        config = ResolutionConfig(
+            base=(1600, 1200), strategy=GrowStrategy, auto_detect=False
+        )
+        assert config.get_display_flags() & pygame.SCALED == 0
+
+    def test_get_display_flags_omits_scaled_under_letterbox_strategy(self):
+        from pygame_display_kit.strategies.letterbox import LetterboxStrategy
+
+        config = ResolutionConfig(
+            base=(1920, 1080), strategy=LetterboxStrategy, auto_detect=False
+        )
+        assert config.get_display_flags() & pygame.SCALED == 0

@@ -29,7 +29,7 @@ from .strategies.letterbox import LetterboxStrategy
 from .strategies.scaled import ScaledStrategy, add_scaled_flag
 from .viewport import ViewportStrategy
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 __all__ = [
     "ResolutionConfig",

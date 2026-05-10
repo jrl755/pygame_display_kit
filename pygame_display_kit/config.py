@@ -17,6 +17,7 @@ import pygame
 
 from .detection import detect_native
 from .platform_adjust import adjust_for_platform
+from .strategies.scaled import ScaledStrategy
 from .viewport import ViewportStrategy
 
 logger = logging.getLogger(__name__)
@@ -195,12 +196,27 @@ class ResolutionConfig:
     # ------------------------------------------------------------------
 
     def get_display_flags(self) -> int:
-        """Return pygame display flags reflecting fullscreen + resizable state."""
+        """Return pygame display flags for the current state + active strategy.
+
+        Composes: ``RESIZABLE`` when windowed and ``self.resizable``,
+        ``FULLSCREEN`` when ``self.fullscreen``, and ``SCALED`` whenever
+        the active strategy is :class:`ScaledStrategy` (whose contract
+        requires SDL's hardware scaler — engaged via the SCALED flag).
+
+        The strategy-awareness is what lets :class:`FullscreenManager.toggle()`
+        compose the correct flags without per-strategy branching at the
+        call site. Skodrak's SCALED bit is preserved across windowed ↔
+        fullscreen toggles by virtue of going through this method.
+        """
         flags = 0
         if self.resizable and not self.fullscreen:
             flags |= pygame.RESIZABLE
         if self.fullscreen:
             flags |= pygame.FULLSCREEN
+        # ScaledStrategy requires the SCALED flag to engage SDL's
+        # hardware scaler. Other strategies don't need this.
+        if self.strategy is ScaledStrategy:
+            flags |= pygame.SCALED
         return flags
 
     def get_available_resolutions(self) -> List[Tuple[int, int]]:
