@@ -23,6 +23,7 @@ def test_screenshot_is_the_granted_surface_with_the_border_at_the_viewport_corne
 
     assert out.exists()
     shot = pygame.image.load(str(out))
+    assert shot.get_bitsize() == 24, "the screenshot must carry no alpha channel"
     assert list(shot.get_size()) == facts["granted"]
     assert facts["corners_ok"] is True
     assert facts["fullscreen"] is True  # nothing saved: fullscreen

@@ -114,7 +114,11 @@ def run_display_check(
     ok, viewport = _corners_ok(session.screen, config)
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    pygame.image.save(session.screen, str(out_path))
+    # A desktop-fullscreen display surface on macOS carries an alpha channel
+    # that opaque blits leave at 0; saved as-is the PNG reads as transparent
+    # (text showed as white blocks in a viewer, measured 2026-10-19). Save the
+    # RGB only.
+    pygame.image.save(session.screen.convert(24), str(out_path))
     facts = {
         "label": label,
         "platform": platform.system(),
