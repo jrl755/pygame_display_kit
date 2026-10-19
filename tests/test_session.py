@@ -98,9 +98,26 @@ class TestOpenPolicy:
         _, fake = _open(session, BIG)
         assert fake.last[0] == (1920, 1080)
 
-    def test_small_monitor_forces_fullscreen_over_a_saved_window(self):
+    def test_scaled_on_a_small_monitor_forces_fullscreen_over_a_saved_window(self):
+        # The window would be the 1920x1080 design size on a 1366x768 panel.
+        prefs = WindowPreferences(fullscreen=False, window_width=1280, window_height=720)
+        session = DisplaySession(_config(ScaledStrategy), preferences=prefs)
+        _, fake = _open(session, LAPTOP)
+        size, flags = fake.last
+        assert size == BASE and flags & pygame.FULLSCREEN and flags & pygame.SCALED
+
+    def test_letterbox_on_a_small_monitor_keeps_a_fitted_window(self):
+        # Letterbox scales the content, so a 1187x668 window is a usable one.
         prefs = WindowPreferences(fullscreen=False, window_width=1280, window_height=720)
         session = DisplaySession(_config(), preferences=prefs)
+        _, fake = _open(session, LAPTOP)
+        size, flags = fake.last
+        assert size == largest_window(_config(), LAPTOP, 100) and not flags & pygame.FULLSCREEN
+
+    def test_letterbox_forces_fullscreen_when_its_minimum_window_cannot_fit(self):
+        # Death Knight clamps its config to 1280x720: no such window fits a laptop.
+        prefs = WindowPreferences(fullscreen=False, window_width=1280, window_height=720)
+        session = DisplaySession(_config(min_size=(1280, 720)), preferences=prefs, min_window=None)
         _, fake = _open(session, LAPTOP)
         size, flags = fake.last
         assert size == LAPTOP and flags & pygame.FULLSCREEN

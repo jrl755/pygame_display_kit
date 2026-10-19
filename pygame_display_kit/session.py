@@ -2,10 +2,14 @@
 
 Everything the four games used to wire by hand, once:
 
-- **Startup policy** (``open``): a monitor at or below the design size
-  (after subtracting OS chrome) forces fullscreen; otherwise the saved
-  :class:`WindowPreferences` decides, and with none saved the game opens
-  fullscreen. Fullscreen is always the desktop's own resolution — never
+- **Startup policy** (``open``): the saved :class:`WindowPreferences`
+  decides, and with none saved the game opens fullscreen. A window is
+  refused when it cannot be a usable one: under Scaled (the window is the
+  design size) on a monitor at or below the design after subtracting OS
+  chrome; under Letterbox / Grow when even the largest window this
+  desktop can show is smaller than the game's minimum (``min_window`` or
+  the config's ``min_size``). A Letterbox game with a small minimum keeps
+  its fitted window on a laptop. Fullscreen is always the desktop's own resolution — never
   a monitor mode switch — except under ``pygame.SCALED``, where the
   base size is passed and SDL scales it to the desktop.
 - **One toggle** (``toggle_fullscreen``) that every entry point calls
@@ -192,20 +196,30 @@ class DisplaySession:
     def open(self) -> pygame.Surface:
         """Open the display per the startup policy. Re-entrant: re-applies the current choice."""
         self._ensure_desktop()
-        _, usable_height = adjust_for_platform(self._desktop[0], self._desktop[1], self.config.base_aspect)
-        forced = should_auto_fullscreen(
-            self._desktop[0], usable_height, self.config.base_width, self.config.base_height
-        )
+        forced = self._window_would_be_unusable()
         fullscreen = True if forced else self.preferences.fullscreen
         if forced:
             logger.info(
-                "Desktop %dx%d (usable height %d) is at or below the %dx%d design; opening fullscreen",
+                "Desktop %dx%d cannot show a usable window for a %dx%d design; opening fullscreen",
                 *self._desktop,
-                usable_height,
                 self.config.base_width,
                 self.config.base_height,
             )
         return self._apply(fullscreen)
+
+    def _window_would_be_unusable(self) -> bool:
+        """The small-monitor rule, per scaling model (see the module docstring)."""
+        if self.scaled or self.config.strategy is GrowStrategy:
+            _, usable_height = adjust_for_platform(self._desktop[0], self._desktop[1], self.config.base_aspect)
+            return should_auto_fullscreen(
+                self._desktop[0], usable_height, self.config.base_width, self.config.base_height
+            )
+        floors = [floor for floor in (self._min_window, self.config.min_size) if floor is not None]
+        if not floors:
+            return False
+        floor_w, floor_h = max(f[0] for f in floors), max(f[1] for f in floors)
+        fits_w, fits_h = largest_window(self.config, self._desktop, self._chrome)
+        return fits_w < floor_w or fits_h < floor_h
 
     def toggle_fullscreen(self) -> pygame.Surface:
         """Switch between fullscreen and the preferred window; saves the choice."""

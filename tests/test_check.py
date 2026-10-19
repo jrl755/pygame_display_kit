@@ -5,19 +5,19 @@ import json
 import pygame
 import pytest
 
-from pygame_display_kit import DisplaySession, LetterboxStrategy, ResolutionConfig, WindowPreferences
+from pygame_display_kit import DisplaySession, LetterboxStrategy, ResolutionConfig
 from pygame_display_kit.check import BORDER, main, run_display_check
 from pygame_display_kit.strategies.scaled import ScaledStrategy
 
-# The dummy driver's desktop is 1024x768, below a 1920x1080 design, so every
-# session here is forced fullscreen at 1024x768 — a 4:3 panel for a 16:9
-# game, which is exactly the letterbox case worth checking.
+# The dummy driver's desktop is 1024x768: with nothing saved each session
+# opens fullscreen there — a 4:3 panel for a 16:9 game, which is exactly the
+# letterbox case worth checking.
 
 
 @pytest.mark.parametrize("strategy", [LetterboxStrategy, ScaledStrategy], ids=["letterbox", "scaled"])
 def test_screenshot_is_the_granted_surface_with_the_border_at_the_viewport_corners(tmp_path, strategy, capsys):
     config = ResolutionConfig(base=(1920, 1080), strategy=strategy, auto_detect=False)
-    session = DisplaySession(config, preferences=WindowPreferences(fullscreen=False, window_width=1280, window_height=720))
+    session = DisplaySession(config, preferences=None)
     out = tmp_path / "check.png"
     facts = run_display_check(session, out, smallest_text_px=20, label="test")
 
@@ -25,7 +25,7 @@ def test_screenshot_is_the_granted_surface_with_the_border_at_the_viewport_corne
     shot = pygame.image.load(str(out))
     assert list(shot.get_size()) == facts["granted"]
     assert facts["corners_ok"] is True
-    assert facts["fullscreen"] is True  # forced: 1024x768 is below the design
+    assert facts["fullscreen"] is True  # nothing saved: fullscreen
     assert facts["strategy"] == strategy.__name__
     printed = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
     assert printed["granted"] == facts["granted"] and printed["corners_ok"] is True
