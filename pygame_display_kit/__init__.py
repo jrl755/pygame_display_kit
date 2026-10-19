@@ -1,6 +1,6 @@
 """pygame_display_kit — resolution and scaling utilities for pygame-ce games.
 
-Public API (v0.3.0):
+Public API (v0.5.0):
 
 - :class:`ResolutionConfig` — runtime resolution state + viewport strategy
 - :func:`detect_native` — read native resolution via pygame.display.Info()
@@ -15,6 +15,9 @@ Public API (v0.3.0):
 - :func:`adjust_for_platform` — subtract macOS Dock / Windows taskbar / Linux panel
 - :func:`scale_value`, :func:`scale_position`, :func:`scale_size`,
   :func:`get_font_size` — per-element scale helpers
+- :class:`DisplaySession` — startup policy, one fullscreen toggle, F11,
+  resize handling and present, on top of a ``ResolutionConfig`` (v0.5)
+- :class:`WindowPreferences` — the saved display choice a game stores (v0.5)
 """
 
 from .auto_fullscreen import should_auto_fullscreen
@@ -23,13 +26,15 @@ from .detection import detect_native
 from .fullscreen import FullscreenManager
 from .helpers import get_font_size, scale_position, scale_size, scale_value
 from .platform_adjust import adjust_for_platform
+from .preferences import WindowPreferences
 from .selection import select_best_resolution
+from .session import DisplaySession
 from .strategies.grow import GrowStrategy
 from .strategies.letterbox import LetterboxStrategy
 from .strategies.scaled import ScaledStrategy, add_scaled_flag
 from .viewport import ViewportStrategy
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 
 __all__ = [
     "ResolutionConfig",
@@ -47,5 +52,7 @@ __all__ = [
     "scale_position",
     "scale_size",
     "get_font_size",
+    "DisplaySession",
+    "WindowPreferences",
     "__version__",
 ]

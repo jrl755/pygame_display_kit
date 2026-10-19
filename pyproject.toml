@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pygame-display-kit"
-version = "0.4.0"
+version = "0.5.0"
 description = "Resolution and scaling utilities for pygame-ce games"
 readme = "README.md"
 license = {text = "MIT"}
