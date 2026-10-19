@@ -225,8 +225,10 @@ class TestEvents:
     def test_resize_resyncs_and_grows_a_too_small_window(self):
         session = DisplaySession(_config(), preferences=WindowPreferences(False, 1280, 720))
         _, fake = _open(session, BIG)
-        session._screen = pygame.Surface((800, 450))  # what the drag left
-        with patch("pygame.display.set_mode", fake):
+        dragged = pygame.Surface((800, 450))  # what the drag left
+        with patch("pygame.display.set_mode", fake), patch(
+            "pygame.display.get_surface", return_value=dragged
+        ), patch("pygame.display.get_window_size", return_value=(800, 450)):
             consumed = session.handle_event(pygame.event.Event(pygame.WINDOWRESIZED, x=800, y=450))
         assert consumed is True
         assert fake.last[0] == (960, 540)
@@ -234,11 +236,64 @@ class TestEvents:
     def test_resize_within_limits_only_resyncs(self):
         session = DisplaySession(_config(), preferences=WindowPreferences(False, 1280, 720))
         _, fake = _open(session, BIG)
-        session._screen = pygame.Surface((1400, 788))
-        with patch("pygame.display.set_mode", fake):
+        dragged = pygame.Surface((1400, 788))
+        with patch("pygame.display.set_mode", fake), patch(
+            "pygame.display.get_surface", return_value=dragged
+        ), patch("pygame.display.get_window_size", return_value=(1400, 788)):
             session.handle_event(pygame.event.Event(pygame.WINDOWRESIZED, x=1400, y=788))
         assert len(fake.calls) == 1
         assert (session.config.current_width, session.config.current_height) == (1400, 788)
+
+    def test_a_desktop_too_small_for_the_minimum_is_never_asked_for_it(self):
+        session = DisplaySession(_config(), preferences=WindowPreferences(False, 800, 450))
+        _, fake = _open(session, (900, 600))
+        with patch("pygame.display.set_mode", fake), patch(
+            "pygame.display.get_surface", return_value=pygame.Surface((400, 225))
+        ), patch("pygame.display.get_window_size", return_value=(400, 225)):
+            session.handle_event(pygame.event.Event(pygame.WINDOWRESIZED, x=400, y=225))
+        assert len(fake.calls) == 1
+
+
+class TestSetFullscreenAndExactSizes:
+    def test_set_fullscreen_is_idempotent_and_remembers(self):
+        saved = []
+        session = DisplaySession(_config(), on_preferences_changed=saved.append)
+        _, fake = _open(session, BIG)
+        with patch("pygame.display.set_mode", fake):
+            session.set_fullscreen(True)
+            session.set_fullscreen(False)
+            session.set_fullscreen(False)
+        assert [c[0] for c in fake.calls] == [BIG, BIG, (1920, 1080), (1920, 1080)]
+        assert [p.fullscreen for p in saved] == [True, False, False]
+
+    def test_unfitted_size_is_asked_for_exactly_and_synced_to_the_grant(self):
+        session = DisplaySession(_config())
+        _, fake = _open(session, BIG, FakeSetMode(lambda size, flags: (size[0], min(size[1], 1290))))
+        with patch("pygame.display.set_mode", fake):
+            session.set_window_size(2560, 1440, fit=False)
+        assert [c[0] for c in fake.calls[1:]] == [(2560, 1440), (2560, 1440)]  # asked twice, no more
+        assert (session.config.current_width, session.config.current_height) == (2560, 1290)
+
+    def test_a_known_desktop_skips_detection(self):
+        session = DisplaySession(_config(), desktop=BIG)
+        fake = FakeSetMode()
+        with patch("pygame_display_kit.session.detect_native", side_effect=AssertionError("not called")), patch(
+            "pygame.display.set_mode", fake
+        ):
+            session.set_fullscreen(True)
+        assert fake.last[0] == BIG
+
+    def test_present_with_an_explicit_screen_and_no_flip(self):
+        session = DisplaySession(_config())
+        _open(session, BIG)
+        dragged = pygame.Surface((1280, 800))
+        frame = pygame.Surface(BASE)
+        frame.fill((40, 160, 240))
+        with patch("pygame.display.flip") as flip:
+            session.present(frame, screen=dragged, flip=False, smooth=False)
+        flip.assert_not_called()
+        assert (session.config.current_width, session.config.current_height) == (1280, 800)
+        assert dragged.get_at((0, 40))[:3] == (40, 160, 240) and dragged.get_at((0, 0))[:3] == (0, 0, 0)
 
     def test_resize_is_ignored_under_scaled_and_in_fullscreen(self):
         scaled = DisplaySession(_config(ScaledStrategy))

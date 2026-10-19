@@ -120,6 +120,7 @@ class DisplaySession:
         hotkey: Optional[int] = pygame.K_F11,
         extra_flags: int = 0,
         resizable: Optional[bool] = None,
+        desktop: Optional[Tuple[int, int]] = None,
     ) -> None:
         """
         Args:
@@ -139,6 +140,8 @@ class DisplaySession:
                 disables it.
             extra_flags: OR-ed into every ``set_mode`` (e.g. DOUBLEBUF).
             resizable: Overrides ``config.resizable`` when given.
+            desktop: The desktop size when already known (a config that
+                detected it); otherwise read once at ``open``.
         """
         self.config = config
         self._preferences = preferences
@@ -150,7 +153,7 @@ class DisplaySession:
         self._extra_flags = extra_flags
         if resizable is not None:
             config.resizable = resizable
-        self._desktop: Tuple[int, int] = (0, 0)
+        self._desktop: Tuple[int, int] = desktop if desktop and desktop[0] > 0 and desktop[1] > 0 else (0, 0)
         self._screen: Optional[pygame.Surface] = None
         self._scaled_cache: Optional[pygame.Surface] = None
 
@@ -188,12 +191,7 @@ class DisplaySession:
 
     def open(self) -> pygame.Surface:
         """Open the display per the startup policy. Re-entrant: re-applies the current choice."""
-        if self._desktop == (0, 0):
-            # Read once: after set_mode, pygame.display.Info() reports the
-            # current video mode (the window), not the desktop.
-            self._desktop = detect_native()
-            if self._desktop[0] <= 0 or self._desktop[1] <= 0:
-                self._desktop = (self.config.base_width, self.config.base_height)
+        self._ensure_desktop()
         _, usable_height = adjust_for_platform(self._desktop[0], self._desktop[1], self.config.base_aspect)
         forced = should_auto_fullscreen(
             self._desktop[0], usable_height, self.config.base_width, self.config.base_height
@@ -211,20 +209,31 @@ class DisplaySession:
 
     def toggle_fullscreen(self) -> pygame.Surface:
         """Switch between fullscreen and the preferred window; saves the choice."""
-        screen = self._apply(not self.config.fullscreen)
-        self._remember(fullscreen=self.config.fullscreen)
+        return self.set_fullscreen(not self.config.fullscreen)
+
+    def set_fullscreen(self, fullscreen: bool) -> pygame.Surface:
+        """Go fullscreen, or to the preferred window; saves the choice. Idempotent."""
+        self._ensure_desktop()
+        screen = self._apply(fullscreen)
+        self._remember(fullscreen=fullscreen)
         return screen
 
-    def set_window_size(self, width: int, height: int) -> pygame.Surface:
-        """Open a window of this size (fitted to the desktop); saves the choice.
+    def set_window_size(self, width: int, height: int, *, fit: bool = True) -> pygame.Surface:
+        """Open a window of this size and save the choice.
+
+        ``fit`` replaces a size this desktop cannot show wholly by the
+        largest offered one; ``fit=False`` asks for exactly that size (the
+        OS may still shrink it, and the config is synced to what it grants).
 
         Raises:
             NotImplementedError: under Scaled, where the window is the base size.
         """
         if self.scaled:
             raise NotImplementedError("under pygame.SCALED the window is the design size")
-        width, height = fit_window(self.config, self._desktop, width, height, self._window_sizes, self._chrome)
-        screen = self._apply(False, (width, height))
+        self._ensure_desktop()
+        if fit:
+            width, height = fit_window(self.config, self._desktop, width, height, self._window_sizes, self._chrome)
+        screen = self._apply(False, (width, height), fit=False)
         self._remember(fullscreen=False, window=(width, height))
         return screen
 
@@ -236,28 +245,42 @@ class DisplaySession:
             self.toggle_fullscreen()
             return True
         if event.type == pygame.WINDOWRESIZED and not self.config.fullscreen and not self.scaled:
-            self._sync_to_granted()
-            self._keep_window_readable()
+            # pygame replaces the display surface on a drag; pick up the live one.
+            self._screen = self._live_screen()
+            self.sync_to_granted()
+            self.keep_window_readable()
             return True
         return False
 
     # ------------------------------------------------------------------ present
 
-    def present(self, render_surface: Optional[pygame.Surface] = None, *, smooth: bool = True) -> None:
+    def present(
+        self,
+        render_surface: Optional[pygame.Surface] = None,
+        *,
+        screen: Optional[pygame.Surface] = None,
+        smooth: bool = True,
+        flip: bool = True,
+    ) -> None:
         """Put the frame on screen.
 
         Scaled: flip (SDL scales the logical surface; a given
         *render_surface* is blitted at the origin first). Letterbox:
         *render_surface* is scaled to the viewport and centred with black
-        bars. Grow: blitted at the viewport offset. ``smooth`` picks
-        ``smoothscale`` over ``scale``.
+        bars, after resyncing the config to the screen's real size (a
+        dragged window). Grow: blitted at the viewport offset. ``screen``
+        overrides the live display surface; ``smooth`` picks
+        ``smoothscale`` over ``scale``; ``flip=False`` leaves the flip to
+        the caller.
         """
-        screen = self.screen
+        if screen is None:
+            screen = self._live_screen()
+        self._screen = screen
         if render_surface is not None and render_surface is not screen:
             if self.scaled:
                 screen.blit(render_surface, (0, 0))
             else:
-                self._sync_to_granted()
+                self.sync_to_granted()
                 size = screen.get_size()
                 target = self.config.strategy.compute_viewport_scale(self.config, size)
                 offset = self.config.strategy.compute_viewport_offset(self.config, size)
@@ -271,18 +294,34 @@ class DisplaySession:
                 if offset != (0, 0) or target != size:
                     screen.fill((0, 0, 0))
                 screen.blit(frame, offset)
-        pygame.display.flip()
+        if flip:
+            pygame.display.flip()
 
     # ------------------------------------------------------------------ internals
 
-    def _apply(self, fullscreen: bool, window: Optional[Tuple[int, int]] = None) -> pygame.Surface:
+    def _ensure_desktop(self) -> None:
+        if self._desktop == (0, 0):
+            # Read once: after set_mode, pygame.display.Info() reports the
+            # current video mode (the window), not the desktop.
+            self._desktop = detect_native()
+            if self._desktop[0] <= 0 or self._desktop[1] <= 0:
+                self._desktop = (self.config.base_width, self.config.base_height)
+
+    def _live_screen(self) -> pygame.Surface:
+        live = pygame.display.get_surface()
+        return live if live is not None else self.screen
+
+    def _apply(
+        self, fullscreen: bool, window: Optional[Tuple[int, int]] = None, *, fit: bool = True
+    ) -> pygame.Surface:
         if self.scaled:
             size = (self.config.base_width, self.config.base_height)
         elif fullscreen:
             size = self._desktop
         else:
-            saved = window or (self.preferences.window_width, self.preferences.window_height)
-            size = fit_window(self.config, self._desktop, *saved, self._window_sizes, self._chrome)
+            size = window or (self.preferences.window_width, self.preferences.window_height)
+            if fit:
+                size = fit_window(self.config, self._desktop, *size, self._window_sizes, self._chrome)
         self.config.set_resolution(size[0], size[1], fullscreen=fullscreen)
         flags = self.config.get_display_flags() | self._extra_flags
         screen = pygame.display.set_mode(size, flags)
@@ -292,7 +331,7 @@ class DisplaySession:
             # window, it gives the size (SP_Adventure, measured 2026-10-01).
             screen = pygame.display.set_mode(size, flags)
         self._screen = screen
-        self._sync_to_granted()
+        self.sync_to_granted()
         logger.info(
             "Display %s %dx%d (strategy %s)",
             "fullscreen" if fullscreen else "windowed",
@@ -302,8 +341,14 @@ class DisplaySession:
         )
         return screen
 
-    def _sync_to_granted(self) -> bool:
-        """Resync the config to the size the OS actually granted; True when it differed."""
+    def sync_to_granted(self) -> bool:
+        """Resync the config to the size the OS actually granted; True when it differed.
+
+        ``LetterboxStrategy`` reads ``config.scale``, which only
+        ``set_resolution`` recomputes, so a size change the config does
+        not hear about (the OS shrinking a window, a drag) would draw at
+        a stale scale: too large clips the top and bottom rows.
+        """
         granted = self.screen.get_size()
         if granted == (self.config.current_width, self.config.current_height):
             return False
@@ -318,16 +363,26 @@ class DisplaySession:
             self.config.update_viewport_dimensions(*granted)
         return True
 
-    def _keep_window_readable(self) -> None:
-        """Grow a window dragged below ``min_window`` back up to it."""
-        if self._min_window is None:
+    def keep_window_readable(self) -> None:
+        """Grow a window dragged below ``min_window`` back up to it.
+
+        Re-opens the window rather than asking the OS for a minimum size
+        (pygame's only call for that is deprecated). Does nothing in
+        fullscreen, under Scaled, or on a desktop too small to show the
+        minimum at all (the OS would refuse, the refusal would arrive as
+        another resize, and this would be asked again for ever).
+        """
+        if self._min_window is None or self.config.fullscreen or self.scaled:
             return
-        width, height = self.screen.get_size()
+        try:
+            width, height = pygame.display.get_window_size()
+        except pygame.error:
+            width, height = self.screen.get_size()
         min_w, min_h = self._min_window
         fits_w, fits_h = largest_window(self.config, self._desktop, self._chrome)
         if (width >= min_w and height >= min_h) or fits_w < min_w or fits_h < min_h:
             return
-        self._apply(False, (max(width, min_w), max(height, min_h)))
+        self._apply(False, (max(width, min_w), max(height, min_h)), fit=False)
 
     def _remember(self, *, fullscreen: bool, window: Optional[Tuple[int, int]] = None) -> None:
         current = self.preferences
