@@ -188,9 +188,12 @@ class DisplaySession:
 
     def open(self) -> pygame.Surface:
         """Open the display per the startup policy. Re-entrant: re-applies the current choice."""
-        self._desktop = detect_native()
-        if self._desktop[0] <= 0 or self._desktop[1] <= 0:
-            self._desktop = (self.config.base_width, self.config.base_height)
+        if self._desktop == (0, 0):
+            # Read once: after set_mode, pygame.display.Info() reports the
+            # current video mode (the window), not the desktop.
+            self._desktop = detect_native()
+            if self._desktop[0] <= 0 or self._desktop[1] <= 0:
+                self._desktop = (self.config.base_width, self.config.base_height)
         _, usable_height = adjust_for_platform(self._desktop[0], self._desktop[1], self.config.base_aspect)
         forced = should_auto_fullscreen(
             self._desktop[0], usable_height, self.config.base_width, self.config.base_height

@@ -9,6 +9,14 @@ absorbs the best patterns from each into a single configurable shape.
 
 ## Status
 
+**v0.5.0** — adds `DisplaySession` (startup policy, one fullscreen toggle
+shared by hotkey and menu, F11 and `WINDOWRESIZED` handling, `present`)
+and `WindowPreferences` (the saved display choice a game stores), plus
+`python -m pygame_display_kit.check` / `run_display_check` for recording
+what a real panel grants. Under `pygame.SCALED` the `set_mode` size is
+the window size (measured), so Scaled sessions always open a base-sized
+window and the preference carries only the fullscreen flag.
+
 **v0.3.0** — adds `ScaledStrategy` (wraps `pygame.SCALED` for
 SDL-handled scaling) + `add_scaled_flag` helper +
 `should_auto_fullscreen` heuristic for forcing fullscreen on
@@ -24,7 +32,7 @@ panel) + `min_size` / `max_size` resolution clamping.
 ## Install
 
 ```bash
-pip install git+https://github.com/jrl755/pygame_display_kit.git@v0.3.0
+pip install git+https://github.com/jrl755/pygame_display_kit.git@v0.5.0
 ```
 
 ## Quick start
